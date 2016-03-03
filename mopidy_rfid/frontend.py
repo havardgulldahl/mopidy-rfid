@@ -12,7 +12,7 @@ from mopidy.core import PlaybackState
 
 logger = logging.getLogger(__name__)
 
-import MFRC522 # https://github.com/brackendawson/MFRC522-python
+from mopidy_rfid import MFRC522 # https://github.com/brackendawson/MFRC522-python
 from blink1py import open_blink1 # pip install blink1py, https://github.com/TronPaul/blink1py
 
 class RFIDFailUID(Exception):
@@ -26,6 +26,7 @@ class RFIDReader(object):
         self.quitting = False
         self.last_card = None
         self.frontend = frontend
+        self.b1 = open_blink1()
 
     def atexit(self):
         'Called on exit'
@@ -90,7 +91,7 @@ class RFIDReader(object):
 
 class RFIDFrontend(pykka.ThreadingActor, CoreListener):
     def __init__(self, config, core):
-        super(RFIDFrontend, self).__init__(*args, **kwargs)
+        super(RFIDFrontend, self).__init__(config, core)
         self.core = core
         self.config = config['rfid']
         self.rdr = RFIDReader(self)
@@ -98,14 +99,14 @@ class RFIDFrontend(pykka.ThreadingActor, CoreListener):
 
     def on_start(self):
         logger.debug('extension startup')
-        rdr.addCard( 'A4F0EB75CA', 'plex:album:13982')
-        rdr.addCard( 'E299F475FA', 'plex:album:' ) # skarpe sanser
-        rdr.addCard( 'F30BEF7562', 'plex:album:14051' ) # crazy frog
-        rdr.addCard( '4707F175C4', 'plex:album:10014' ) # marcus martinus
-        rdr.addCard( 'A612F47535', 'plex:album:10032' ) # kravitz
-        rdr.addCard( '9D91F6A55F', 'plex:album:14068' ) # eventyrlig energi
-        rdr.addCard( '5148ED7581', 'plex:track:7606' ) # merry xmas
-        rdr.run()
+        self.rdr.addCard( 'A4F0EB75CA', 'plex:album:13982')
+        self.rdr.addCard( 'E299F475FA', 'plex:album:' ) # skarpe sanser
+        self.rdr.addCard( 'F30BEF7562', 'plex:album:14051' ) # crazy frog
+        self.rdr.addCard( '4707F175C4', 'plex:album:10014' ) # marcus martinus
+        self.rdr.addCard( 'A612F47535', 'plex:album:10032' ) # kravitz
+        self.rdr.addCard( '9D91F6A55F', 'plex:album:14068' ) # eventyrlig energi
+        self.rdr.addCard( '5148ED7581', 'plex:track:7606' ) # merry xmas
+        self.rdr.run()
         # TODO add preprogrammed color patterns for blink1
 
     def on_stop(self):
@@ -145,21 +146,21 @@ class RFIDFrontend(pykka.ThreadingActor, CoreListener):
         'takes a mopdiy uri, e.g. "plex:album:32323". look it up, and play what we find.'
     
         logging.info('play_backend_uri : "%r"', uri)
-        hits = server.core.library.browse(uri)
+        hits = self.core.library.browse(uri).get()
         # browse(): Returns a list of mopidy.models.Ref objects for the directories and tracks at the given uri.
         logging.info('Got hits from browse(): %r', hits)
         if len(hits) == 0:
             # try track lookup
-            hits = server.core.library.lookup(args.uri)
+            hits = self.core.library.lookup(args.uri).get()
             logging.info('Got hits from lookup() : %r', hits)
 
         if len(hits) == 0:
             print('No hits for "{}"'.format(args.uri))
         else:
-            server.core.tracklist.clear()
-            logging.debug('got special uris: %r', [t['uri'] for t in hits])
-            server.core.tracklist.add(uris=[t['uri'] for t in hits])
-            server.core.playback.play()
+            self.core.tracklist.clear()
+            logging.debug('got special uris: %r', [t.uri for t in hits])
+            self.core.tracklist.add(uris=[t.uri for t in hits])
+            self.core.playback.play().get()
 
 
 
